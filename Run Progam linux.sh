@@ -37,7 +37,7 @@ if [ -f /etc/arch-release ]; then
     if [ -f /etc/os-release ] && grep -q "SteamOS" /etc/os-release; then
         # SteamOS-specific setup
         install_steamos_dependencies
-		sudo steamos-devmode enable
+	sudo steamos-devmode enable
     else
         # Generic Arch-based setup
         install_arch_dependencies
