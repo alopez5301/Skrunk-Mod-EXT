@@ -1,0 +1,6 @@
+PyQt5
+pillow
+fonttools
+pandas
+plotly
+requests
