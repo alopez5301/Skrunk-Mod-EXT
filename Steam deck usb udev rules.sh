@@ -25,3 +25,4 @@ echo "Restoring readonly mode..."
 sudo steamos-readonly enable
 
 echo "Setup complete! Log out and back in for group changes to take effect."
+exit 0
