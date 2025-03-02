@@ -90,19 +90,23 @@ class SkrunksEasyTFR(QWidget):
         self.radio_7point = QRadioButton("7-Point Curve")
         self.radio_8point = QRadioButton("8-Point Curve")
         self.radio_tsm = QRadioButton("TSM Fix Mode")
+        self.radio_auto = QRadioButton("Auto TFR Clean")
         self.radio_7point.setChecked(True)
         
         self.curve_group.addButton(self.radio_7point)
         self.curve_group.addButton(self.radio_8point)
         self.curve_group.addButton(self.radio_tsm)
+        self.curve_group.addButton(self.radio_auto)
         
         self.radio_7point.toggled.connect(lambda: self.switch_curve_type(self.temperatures_7pt))
         self.radio_8point.toggled.connect(lambda: self.switch_curve_type(self.temperatures_8pt))
         self.radio_tsm.toggled.connect(lambda: self.switch_curve_type(self.temperatures_tsm))
+        self.radio_auto.toggled.connect(lambda: self.switch_curve_type(self.temperatures_7pt))
         
         curve_layout.addWidget(self.radio_7point)
         curve_layout.addWidget(self.radio_8point)
         curve_layout.addWidget(self.radio_tsm)
+        curve_layout.addWidget(self.radio_auto)
         curve_layout.addStretch(1)
         
         curve_group_box.setLayout(curve_layout)
@@ -182,6 +186,7 @@ class SkrunksEasyTFR(QWidget):
         self.value_inputs = {}
         
         is_tsm_mode = self.radio_tsm.isChecked()
+        is_auto_mode = self.radio_auto.isChecked()
         
         for i, temp in enumerate(temperatures):
             row = i + 1  
@@ -197,6 +202,24 @@ class SkrunksEasyTFR(QWidget):
                 value_input.setStyleSheet("background-color: #f0f0f0;")
                 self.grid_layout.addWidget(value_input, row, 1)
                 
+                self.value_inputs[temp] = value_input
+                continue
+            
+            if is_auto_mode:
+                temp_label = QLabel(f"{temp} °F")
+                temp_label.setFont(QFont("Arial", 10))
+                self.grid_layout.addWidget(temp_label, row, 0)
+                
+                value_input = QLineEdit("")
+                value_input.setFont(QFont("Arial", 10))
+                
+                if temp != 70:
+                    value_input.setReadOnly(True)
+                    value_input.setStyleSheet("background-color: #f0f0f0;")
+                else:
+                    value_input.textChanged.connect(self.auto_fill_values)
+                
+                self.grid_layout.addWidget(value_input, row, 1)
                 self.value_inputs[temp] = value_input
                 continue
                 
@@ -219,6 +242,47 @@ class SkrunksEasyTFR(QWidget):
             if is_tsm_mode and temp == 70:
                 value_input.textChanged.connect(self.update_tsm_200_value)
     
+    def auto_fill_values(self):
+        if not self.radio_auto.isChecked() or 70 not in self.value_inputs:
+            return
+            
+        try:
+            r70 = float(self.value_inputs[70].text())
+            if r70 <= 0:
+                return
+                
+            target_ratio_at_600 = 0.79
+            
+            if 200 in self.value_inputs:
+                self.value_inputs[200].setText(f"{(r70 + 0.001):.3f}")
+            
+            for temp in self.temperatures_7pt:
+                if temp == 70 or temp == 200:
+                    continue
+                    
+                if temp == 800:
+                    if 570 in self.value_inputs and self.value_inputs[570].text():
+                        try:
+                            r570 = float(self.value_inputs[570].text())
+                            r800 = r570 * 0.96
+                            self.value_inputs[800].setText(f"{r800:.3f}")
+                        except ValueError:
+                            pass
+                    continue
+                
+                if temp <= 600:
+                    ratio = 1.0 - ((1.0 - target_ratio_at_600) * (temp - 70) / (600 - 70))
+                    res_value = r70 * ratio
+                    
+                    if temp == 570:
+                        temp_ratio = 1.0 - ((1.0 - target_ratio_at_600) * (570 - 70) / (600 - 70))
+                        res_value = r70 * temp_ratio
+                        
+                    self.value_inputs[temp].setText(f"{res_value:.3f}")
+        
+        except (ValueError, KeyError):
+            pass
+    
     def update_tsm_200_value(self):
         if self.radio_tsm.isChecked() and 70 in self.value_inputs and 200 in self.value_inputs:
             try:
@@ -231,7 +295,10 @@ class SkrunksEasyTFR(QWidget):
         try:
             temperatures = []
             
-            if self.radio_tsm.isChecked():
+            if self.radio_auto.isChecked():
+                temperatures = self.temperatures_7pt.copy()
+                self.auto_fill_values()
+            elif self.radio_tsm.isChecked():
                 for temp in self.current_temperatures:
                     if temp in self.temp_inputs:
                         try:
@@ -265,12 +332,12 @@ class SkrunksEasyTFR(QWidget):
             R0 = values[0]
             coefficients = [(temp, (R / R0)) for temp, R in zip(temperatures, values)]
             
-            if self.extrapolateCheck.isChecked() and 800 in self.current_temperatures:
+            if (self.extrapolateCheck.isChecked() or self.radio_auto.isChecked()) and 800 in self.current_temperatures:
                 idx_800 = self.current_temperatures.index(800)
                 prev_temp_idx = idx_800 - 1
                 if prev_temp_idx >= 0:
                     prev_coef = values[prev_temp_idx] / R0
-                    coefficients[idx_800] = (800, round(prev_coef * 1.04, 3))
+                    coefficients[idx_800] = (800, round(prev_coef * 0.96, 3))
             
             self.calculated_coefficients = coefficients
             
@@ -331,6 +398,8 @@ class SkrunksEasyTFR(QWidget):
                 
                 if self.radio_tsm.isChecked():
                     self.update_tsm_200_value()
+                elif self.radio_auto.isChecked():
+                    self.auto_fill_values()
                 
                 QMessageBox.information(self, "Import Complete", 
                     f"CSV data imported successfully with base resistance of {base_resistance}.")
@@ -355,8 +424,6 @@ class SkrunksEasyTFR(QWidget):
                 QMessageBox.information(self, "Success", "TFR data saved successfully!")
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", f"Failed to export: {str(e)}")
-
-
 
 class ImageLoaderThread(QThread):
     progress_update = pyqtSignal(int, int)
