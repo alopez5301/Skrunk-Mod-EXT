@@ -101,7 +101,7 @@ class SkrunksEasyTFR(QWidget):
         self.radio_7point.toggled.connect(lambda: self.switch_curve_type(self.temperatures_7pt))
         self.radio_8point.toggled.connect(lambda: self.switch_curve_type(self.temperatures_8pt))
         self.radio_tsm.toggled.connect(lambda: self.switch_curve_type(self.temperatures_tsm))
-        self.radio_auto.toggled.connect(lambda: self.switch_curve_type(self.temperatures_7pt))
+        self.radio_auto.toggled.connect(lambda: self.switch_curve_type(self.temperatures_auto))
         
         curve_layout.addWidget(self.radio_7point)
         curve_layout.addWidget(self.radio_8point)
@@ -137,6 +137,7 @@ class SkrunksEasyTFR(QWidget):
         self.temperatures_7pt = [70, 200, 300, 400, 500, 570, 800]
         self.temperatures_8pt = [-40, 70, 200, 300, 400, 500, 570, 800]  
         self.temperatures_tsm = [70, 200, 220, 300, 500, 570, 800] 
+        self.temperatures_auto = [70, 200, 300, 400, 500, 600, 800]
         
         self.current_temperatures = self.temperatures_7pt
         self.temp_inputs = {}
@@ -245,43 +246,35 @@ class SkrunksEasyTFR(QWidget):
     def auto_fill_values(self):
         if not self.radio_auto.isChecked() or 70 not in self.value_inputs:
             return
-            
         try:
             r70 = float(self.value_inputs[70].text())
             if r70 <= 0:
                 return
-                
             target_ratio_at_600 = 0.79
-            
+
             if 200 in self.value_inputs:
                 self.value_inputs[200].setText(f"{(r70 + 0.001):.3f}")
-            
-            for temp in self.temperatures_7pt:
+
+            for temp in self.temperatures_auto:
                 if temp == 70 or temp == 200:
                     continue
-                    
-                if temp == 800:
-                    if 570 in self.value_inputs and self.value_inputs[570].text():
+                elif temp == 600:
+                    self.value_inputs[600].setText("0.79")
+                elif temp == 800:
+                    if 600 in self.value_inputs and self.value_inputs[600].text():
                         try:
-                            r570 = float(self.value_inputs[570].text())
-                            r800 = r570 * 0.96
+                            r600 = float(self.value_inputs[600].text())
+                            r800 = r600 * 0.96
                             self.value_inputs[800].setText(f"{r800:.3f}")
                         except ValueError:
                             pass
-                    continue
-                
-                if temp <= 600:
+                else:
                     ratio = 1.0 - ((1.0 - target_ratio_at_600) * (temp - 70) / (600 - 70))
                     res_value = r70 * ratio
-                    
-                    if temp == 570:
-                        temp_ratio = 1.0 - ((1.0 - target_ratio_at_600) * (570 - 70) / (600 - 70))
-                        res_value = r70 * temp_ratio
-                        
                     self.value_inputs[temp].setText(f"{res_value:.3f}")
-        
         except (ValueError, KeyError):
             pass
+
     
     def update_tsm_200_value(self):
         if self.radio_tsm.isChecked() and 70 in self.value_inputs and 200 in self.value_inputs:
