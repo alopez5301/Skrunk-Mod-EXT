@@ -289,7 +289,7 @@ class SkrunksEasyTFR(QWidget):
             temperatures = []
             
             if self.radio_auto.isChecked():
-                temperatures = self.temperatures_7pt.copy()
+                temperatures = self.temperatures_auto.copy()
                 self.auto_fill_values()
             elif self.radio_tsm.isChecked():
                 for temp in self.current_temperatures:
